@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Shilalekh — explore 100 deciphered inscriptions from India and around the world, with translations into 27 languages.">
+  <meta name="theme-color" content="#101923">
+  <meta property="og:title" content="Shilalekh — 100 Inscriptions of the World">
+  <meta property="og:description" content="Explore, search and translate 100 important deciphered inscriptions.">
+  <meta property="og:type" content="website">
+  <title>Shilalekh — 100 Inscriptions of the World</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/site-icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">an epigraphy studio for the curious</p>
+    <h1 class="title">100 inscriptions, in the languages of your choosing</h1>
+    <p class="lede">A curated collection of 100 important inscriptions — 30 from India and 70 from around the world — presented with documented phrases or carefully prepared content summaries. Search, select, and translate them into any of India's 22 scheduled languages plus 5 major world languages.</p>
+    <div class="stat-row">
+      <div class="stat"><b>100</b><span>inscriptions</span></div>
+      <div class="stat"><b id="indiaCount">30</b><span>from India</span></div>
+      <div class="stat"><b id="worldCount">70</b><span>from the rest of the world</span></div>
+      <div class="stat"><b id="languageCount">27</b><span>target languages</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <h2 class="h">Browse & select</h2>
+    <p class="sub">Search by name, place, era, or script. Click a card to select it; you can choose as many inscriptions as you like.</p>
+
+    <div class="search-row">
+      <input id="searchInput" type="text" placeholder="Search — e.g. 'Ashoka', 'Rome', 'runic', 'Tamil', '5th century'…">
+      <button class="filter-chip active" data-filter="all">All</button>
+      <button class="filter-chip" data-filter="India">India</button>
+      <button class="filter-chip" data-filter="World">World</button>
+    </div>
+
+    <div class="list-meta">
+      <span id="listCount">Showing 100 of 100</span>
+      <span><button class="link-btn" id="clearSelection">Clear selection</button> · <span id="selCount">0</span> selected</span>
+    </div>
+
+    <div id="inscriptionList"></div>
+  </section>
+
+  <section>
+    <h2 class="h">Translate into</h2>
+    <p class="sub">Choose one or more target languages. Each language is selected independently, and you can translate the same inscription into several languages at once.</p>
+    <div class="lang-groups" id="langGroups"></div>
+    <div class="picker-actions">
+      <button class="link-btn" id="selectDefault">Select suggested set</button>
+      <button class="link-btn" id="selectAllLang">Select all 27</button>
+      <button class="link-btn" id="selectNoneLang">Clear</button>
+    </div>
+    <div class="cta-row">
+      <button class="primary" id="translateBtn">Translate selected inscriptions</button>
+      <span class="status" id="statusText"></span>
+    </div>
+  </section>
+
+  <section id="results" style="border-bottom:none;">
+    <h2 class="h">Readings</h2>
+    <div id="resultsWrap"></div>
+  </section>
+
+</div>
+
+<footer>Shilalekh · translations are AI-generated from documented inscription content and may not capture every archaic or regional nuance — cross-check important readings with an epigraphist. Where an inscription's exact original wording is not firmly established from a short famous phrase, the translation is based on its well-documented content summary rather than a verbatim transcription.</footer>
+
+<script>
+/* ---------- Language data ---------- */
+const INDIAN_LANGUAGES = [
+  { group: "Classical & liturgical", items: [["Sanskrit","संस्कृतम्"], ["Konkani","कोंकणी"]] },
+  { group: "North & Central", items: [
+    ["Hindi","हिन्दी"], ["Urdu","اردو"], ["Punjabi","ਪੰਜਾਬੀ"], ["Kashmiri","کٲشُر"],
+    ["Dogri","डोगरी"], ["Sindhi","سنڌي"], ["Nepali","नेपाली"], ["Maithili","मैथिली"] ]},
+  { group: "East & Northeast", items: [
+    ["Bengali","বাংলা"], ["Odia","ଓଡ଼ିଆ"], ["Assamese","অসমীয়া"],
+    ["Bodo","बड़ो"], ["Manipuri (Meitei)","মৈতৈলোন্"], ["Santali","ᱥᱟᱱᱛᱟᱲᱤ"] ]},
+  { group: "West", items: [["Marathi","मराठी"], ["Gujarati","ગુજરાતી"]] },
+  { group: "South", items: [["Tamil","தமிழ்"], ["Telugu","తెలుగు"], ["Kannada","ಕನ್ನಡ"], ["Malayalam","മലയാളം"]] },
+];
+const WORLD_LANGUAGES = [
+  { group: "Worldwide", items: [["English","English"], ["French","Français"], ["Spanish","Español"], ["Arabic","العربية"], ["Mandarin Chinese","中文"]] }
+];
+const ALL_GROUPS = [...INDIAN_LANGUAGES, ...WORLD_LANGUAGES];
+const DEFAULT_LANGS = new Set(["Hindi","Tamil","Bengali","Sanskrit","English"]);
+const selectedLangs = new Set(DEFAULT_LANGS);
+
+function nativeNameOf(name){
+  for(const g of ALL_GROUPS) for(const [n,native] of g.items) if(n===name) return native;
+  return "";
+}
+
+/* ---------- Inscriptions dataset ----------
+   fields: [id, name, region ("India"/"World"), place, era, script, blurb, keyPhrase|null]
+   keyPhrase = a firmly documented short original phrase, used as translation source when present.
+   otherwise the blurb (clearly labeled "documented summary") is translated instead. */
+const DATA = [
+["in01", "Major Rock Edicts of Ashoka – Girnar", "India", "Junagadh, Gujarat", "c. 257 BCE", "Brahmi script, Prakrit language", "One of the main sets of Ashoka's rock edicts, laying out his policy of Dhamma (moral law) after the Kalinga war.", "Beloved-of-the-Gods speaks thus."],
+["in02", "Kalinga Rock Edicts – Dhauli", "India", "Dhauli, Odisha", "c. 256 BCE", "Brahmi script, Prakrit", "Ashoka's special edicts addressed to the officials of conquered Kalinga, urging just and compassionate governance.", "All men are my children."],
+["in03", "Pillar Edict – Delhi-Topra", "India", "originally Topra, Haryana; moved to Delhi", "c. 243 BCE", "Brahmi script, Prakrit", "One of Ashoka's seven pillar edicts, later moved to Delhi by Sultan Firoz Shah Tughlaq in the 14th century.", "Beloved-of-the-Gods speaks thus."],
+["in04", "Sarnath Lion Capital Inscription", "India", "Sarnath, Uttar Pradesh", "c. 250 BCE", "Brahmi script, Prakrit", "The inscription beneath Ashoka's famous four-lion capital, now India's national emblem, warning against schism in the Buddhist community.", null],
+["in05", "Rummindei (Lumbini) Pillar Inscription", "India", "Lumbini, near the Indian border (Nepal)", "c. 249 BCE", "Brahmi script, Prakrit", "Commemorates Ashoka's pilgrimage to the Buddha's birthplace and the tax exemption he granted the village.", null],
+["in06", "Junagadh Rock Inscription of Rudradaman I", "India", "Junagadh, Gujarat", "c. 150 CE", "Brahmi script, Sanskrit", "The earliest known long inscription in polished classical Sanskrit, describing the Western Kshatrapa king's repair of the Sudarshana lake.", null],
+["in07", "Allahabad Pillar Inscription (Prayag Prashasti)", "India", "Prayagraj (Allahabad), Uttar Pradesh", "c. 350 CE", "Brahmi script, Sanskrit", "A eulogy of the Gupta emperor Samudragupta composed by his court poet Harisena, listing his conquests.", null],
+["in08", "Mehrauli Iron Pillar Inscription of Chandra", "India", "Delhi", "c. 4th–5th century CE", "Brahmi script, Sanskrit", "Praises a king named Chandra (usually identified with a Gupta ruler) for his military victories; the pillar itself is famed for resisting rust.", null],
+["in09", "Bhitari Pillar Inscription of Skandagupta", "India", "Bhitari, Uttar Pradesh", "c. 450–467 CE", "Brahmi script, Sanskrit", "Records Gupta emperor Skandagupta's struggles to restore the fortunes of his dynasty after the Hun invasions.", null],
+["in10", "Aihole Inscription of Pulakeshin II", "India", "Aihole, Karnataka", "634 CE", "Brahmi-derived script, Sanskrit", "A eulogy composed by the poet Ravikirti recounting the Chalukya king Pulakeshin II's victory over Harsha of Kanauj.", null],
+["in11", "Halmidi Inscription", "India", "Halmidi village, Karnataka", "c. 450 CE", "early Kannada script", "The oldest known inscription substantially in the Kannada language, recording a royal land grant.", null],
+["in12", "Uttaramerur Inscription", "India", "Uttiramerur, Tamil Nadu", "c. 920 CE", "Tamil script", "Details an unusually democratic constitution for a village assembly (sabha) under the Chola kings, including election procedures.", null],
+["in13", "Brihadeeswarar Temple Inscriptions of Rajaraja I", "India", "Thanjavur, Tamil Nadu", "c. 1010 CE", "Tamil script", "Extensive temple-wall records of grants, endowments and administration under the Chola king Rajaraja I, who built the temple.", null],
+["in14", "Thiruvalangadu Copper Plates", "India", "Thiruvalangadu, Tamil Nadu", "c. 1018 CE", "Sanskrit and Tamil", "Chola copper-plate grant tracing the dynasty's genealogy and recording a temple land donation.", null],
+["in15", "Hathigumpha Inscription of Kharavela", "India", "Udayagiri, Odisha", "c. 1st–2nd century BCE", "Brahmi script, Prakrit", "An autobiographical record of the Kalinga king Kharavela's reign, year by year, including military campaigns.", null],
+["in16", "Besnagar Heliodorus Pillar Inscription", "India", "Besnagar, Madhya Pradesh", "c. 113 BCE", "Brahmi script, Prakrit", "Erected by Heliodorus, a Greek ambassador who became a devotee of Vishnu — early evidence of Greek engagement with Indian religion.", null],
+["in17", "Nashik Cave Inscription of Gautami Balashri", "India", "Nashik, Maharashtra", "c. 2nd century CE", "Brahmi script, Prakrit", "A queen mother's eulogy of her son, the Satavahana king Gautamiputra Satakarni, praising his conquests and character.", null],
+["in18", "Sanchi Stupa Inscriptions", "India", "Sanchi, Madhya Pradesh", "3rd century BCE – 1st century CE", "Brahmi script, Prakrit", "Hundreds of short donor inscriptions on the railings and gateways of the Great Stupa, recording gifts from monks, nuns and laypeople.", null],
+["in19", "Bhattiprolu Casket Inscription", "India", "Bhattiprolu, Andhra Pradesh", "c. 3rd century BCE", "a regional Brahmi variant", "Inscriptions on relic caskets naming Buddhist donors, notable for a distinct local variant of the Brahmi script.", null],
+["in20", "Piprahwa Vase Inscription", "India", "Piprahwa, Uttar Pradesh", "c. 3rd century BCE (context debated)", "Brahmi script, Prakrit", "An inscription on a relic vase associated with a Shakya clan deposit, long discussed in relation to relics of the Buddha.", null],
+["in21", "Gwalior Prashasti of Bhoja", "India", "Gwalior, Madhya Pradesh", "9th century CE", "Nagari-derived script, Sanskrit", "A eulogistic inscription of the Gurjara-Pratihara king Mihira Bhoja, part of a temple dedicated to Vishnu.", null],
+["in22", "Deopara Inscription of Vijayasena", "India", "Deopara, West Bengal", "12th century CE", "Sanskrit", "An ornate eulogy of the Sena king Vijayasena, celebrated for its literary Sanskrit style.", null],
+["in23", "Shravanabelagola Gommateshwara Inscriptions", "India", "Shravanabelagola, Karnataka", "c. 981 CE", "Kannada and Sanskrit", "Inscriptions at the base of the giant Bahubali statue, including one of the earliest three-line Kannada poetic inscriptions, attributed to the minister Chavundaraya.", null],
+["in24", "Sohgaura Copper Plate Inscription", "India", "Sohgaura, Uttar Pradesh", "c. 3rd century BCE", "Brahmi script, Prakrit", "One of the earliest Indian copper-plate records, believed to concern relief measures for a famine.", null],
+["in25", "Nagarjunakonda Inscriptions", "India", "Nagarjunakonda, Andhra Pradesh", "3rd century CE", "Brahmi script, Prakrit", "A large group of inscriptions from the Ikshvaku dynasty's capital, recording royal women's patronage of Buddhist monuments.", null],
+["in26", "Mandsaur Inscription of Yashodharman", "India", "Mandsaur, Madhya Pradesh", "c. 532 CE", "Sanskrit", "Celebrates King Yashodharman's victory over the Hun ruler Mihirakula, in ornate Sanskrit verse.", null],
+["in27", "Eran Pillar (Boar) Inscription", "India", "Eran, Madhya Pradesh", "c. 510 CE", "Sanskrit", "A Gupta-era inscription accompanying a colossal boar sculpture, recording a royal dedication.", null],
+["in29", "Kudumiyanmalai Music Inscription", "India", "Kudumiyanmalai, Tamil Nadu", "c. 7th century CE", "Tamil and Grantha script, Sanskrit", "A rare inscription recording ancient musical notation and scales, of major importance to the history of Indian music.", null],
+["in30", "Kandahar Bilingual Rock Edict of Ashoka", "India (Mauryan Empire)", "Kandahar, Afghanistan", "c. 260 BCE", "Greek and Aramaic", "One of Ashoka's edicts written in Greek and Aramaic for the Hellenistic and Iranian communities at the empire's northwest frontier.", null],
+["w01", "Rosetta Stone", "World", "Egypt", "196 BCE", "Egyptian hieroglyphic, Demotic, and Greek", "A priestly decree honoring Pharaoh Ptolemy V, inscribed in three scripts — the key that unlocked the decipherment of hieroglyphics.", "The key that unlocked Egyptian hieroglyphs for the modern world."],
+["w02", "Behistun Inscription", "World", "Kermanshah, Iran", "c. 520 BCE", "Old Persian, Elamite, Akkadian cuneiform", "King Darius I's monumental trilingual account of his rise to power, carved high on a cliff face.", "I am Darius, the great king, king of kings."],
+["w03", "Code of Hammurabi", "World", "Babylon (modern Iraq)", "c. 1754 BCE", "Akkadian cuneiform", "One of the earliest and most complete written legal codes, inscribed on a diorite stele topped by a relief of Hammurabi before the sun god.", "When lofty Anu... and Bel... established laws for the peoples."],
+["w04", "Cyrus Cylinder", "World", "Babylon (modern Iraq)", "539 BCE", "Akkadian cuneiform", "A clay cylinder recording Cyrus the Great's capture of Babylon and his policy of religious tolerance.", "I am Cyrus, king of the world."],
+["w05", "Merneptah Stele", "World", "Thebes, Egypt", "c. 1208 BCE", "Egyptian hieroglyphic", "A victory inscription of Pharaoh Merneptah containing the earliest known reference to 'Israel'.", null],
+["w06", "Mesha Stele (Moabite Stone)", "World", "Dhiban, Jordan", "c. 840 BCE", "Moabite (Phoenician-derived script)", "King Mesha of Moab's account of his revolt against Israel, an important early Semitic-language inscription.", "I am Mesha, son of Chemosh-yatti, king of Moab."],
+["w07", "Sumerian King List", "World", "Mesopotamia (modern Iraq)", "c. 2100 BCE", "Sumerian cuneiform", "A chronicle listing Mesopotamian kings, blending historical rulers with legendary pre-flood figures.", null],
+["w08", "Code of Ur-Nammu", "World", "Ur (modern Iraq)", "c. 2100–2050 BCE", "Sumerian cuneiform", "The oldest known written law code, predating Hammurabi's by roughly three centuries.", null],
+["w09", "Epic of Gilgamesh Tablets", "World", "Nineveh (modern Iraq)", "surviving copies c. 7th century BCE", "Akkadian cuneiform", "Clay tablets preserving the Mesopotamian epic of the hero-king Gilgamesh's quest for immortality.", null],
+["w10", "Palermo Stone", "World", "Egypt", "c. 25th century BCE", "Egyptian hieroglyphic", "Fragment of a royal annal recording early Egyptian kings and yearly events of their reigns.", null],
+["w11", "Res Gestae Divi Augusti", "World", "Ankara, Turkey (Temple of Augustus)", "14 CE", "Latin and Greek", "Emperor Augustus's own account of his achievements, inscribed publicly across the Roman Empire.", "Below is a copy of the achievements of the deified Augustus."],
+["w12", "Law of the Twelve Tables", "World", "Rome, Italy", "451–450 BCE", "Latin", "The foundational code of Roman law, originally displayed publicly in the Forum.", null],
+["w13", "Gortyn Code", "World", "Crete, Greece", "5th century BCE", "Greek", "The most complete surviving law code from ancient Greece, inscribed on a large stone wall.", null],
+["w14", "Trajan's Column Inscription", "World", "Rome, Italy", "113 CE", "Latin", "The dedicatory inscription at the base of Trajan's Column, commemorating his Dacian Wars.", null],
+["w15", "Duenos Inscription", "World", "Rome, Italy", "c. 6th century BCE", "Old Latin", "One of the oldest known Latin inscriptions, on a set of small clay vessels.", null],
+["w16", "Lapis Niger Inscription", "World", "Roman Forum, Italy", "c. 6th century BCE", "Old Latin", "A fragmentary early Latin inscription found beneath a black marble pavement in the Roman Forum, possibly a sacred law.", null],
+["w17", "Parian Marble", "World", "Paros, Greece", "264/263 BCE", "Greek", "An inscribed chronology of Greek history and mythology up to the 3rd century BCE.", null],
+["w18", "Nestor's Cup Inscription", "World", "Ischia, Italy", "c. 8th century BCE", "early Greek alphabet", "One of the earliest known examples of Greek alphabetic writing, a playful verse scratched onto a drinking cup.", null],
+["w19", "Dipylon Inscription", "World", "Athens, Greece", "c. 740 BCE", "early Greek alphabet", "Among the oldest known specimens of the Greek alphabet, inscribed on a wine jug.", null],
+["w21", "Magna Carta", "World", "Runnymede, England", "1215 CE", "Latin", "The charter limiting royal power that King John was forced to seal, a cornerstone of constitutional law.", "No free man shall be seized or imprisoned except by lawful judgment."],
+["w22", "Jelling Stones", "World", "Jelling, Denmark", "c. 965 CE", "Younger Futhark runes", "Runestones raised by the Danish king Harald Bluetooth, commemorating his parents and his conversion of Denmark to Christianity.", null],
+["w23", "Rök Runestone", "World", "Östergötland, Sweden", "early 9th century CE", "Younger Futhark runes", "The longest known runic inscription, with a cryptic text that has puzzled scholars for centuries.", null],
+["w24", "Kensington Runestone", "World", "Minnesota, USA", "claims 1362 CE; widely considered a 19th-century creation", "runes", "A disputed stone claiming to record a medieval Scandinavian expedition to North America; most scholars regard it as a later hoax.", null],
+["w25", "Piraeus Lion Runic Graffiti", "World", "originally Piraeus, Greece; now Venice, Italy", "c. 11th century CE", "Norse runes", "Runic graffiti carved by Scandinavian mercenaries onto an ancient marble lion statue.", null],
+["w26", "Franks Casket Inscription", "World", "England", "early 8th century CE", "Anglo-Saxon runes and Latin", "An intricately carved whalebone box with runic and Latin inscriptions mixing Christian and Germanic legends.", null],
+["w27", "Ruthwell Cross Inscription", "World", "Dumfriesshire, Scotland", "c. 8th century CE", "runes and Latin", "A stone cross bearing verses closely related to the Old English poem 'The Dream of the Rood'.", null],
+["w28", "Pillar of Eliseg", "World", "Wales", "9th century CE", "Latin", "A cross commemorating the kings of Powys, tracing a royal genealogy back to legendary founders.", null],
+["w29", "Bayeux Tapestry Inscriptions", "World", "Bayeux, France", "c. 1070s CE", "Latin", "Embroidered captions running along the famous tapestry narrating the Norman Conquest of England.", null],
+["w30", "Tikal Stelae Inscriptions", "World", "Tikal, Guatemala", "4th–9th century CE", "Maya hieroglyphic script", "Carved stone monuments recording the deeds and dynastic history of Tikal's Maya rulers.", null],
+["w31", "Copán Hieroglyphic Stairway", "World", "Copán, Honduras", "8th century CE", "Maya hieroglyphic script", "The longest known Maya hieroglyphic text, recording the dynastic history of Copán's kings.", null],
+["w32", "Palenque Temple of the Inscriptions", "World", "Palenque, Mexico", "7th century CE", "Maya hieroglyphic script", "A temple-pyramid whose inner tablets record the reign of the Maya king Pakal, who is buried beneath it.", null],
+["w33", "Aztec Sun Stone", "World", "Tenochtitlan, Mexico", "c. late 15th century CE", "Aztec (Nahua) pictographic glyphs", "A monumental carved stone bearing the Aztec cosmological calendar and solar symbolism.", null],
+["w35", "Dighton Rock", "World", "Massachusetts, USA", "markings of disputed age", "petroglyphs of debated origin", "A boulder covered in petroglyphs whose age and makers remain disputed among scholars.", null],
+["w36", "Inca Quipu Cords", "World", "Andes region, Peru", "15th–16th century CE", "knotted-cord recording system (not a script)", "Knotted cords used by the Inca to record numerical and possibly narrative information, still only partly understood.", null],
+["w37", "Bilbao Monument Inscriptions", "World", "Santa Lucía Cotzumalguapa, Guatemala", "c. 600–900 CE", "pre-Maya iconographic carving", "Carved monuments from a lesser-known pre-Columbian culture, blending Maya and non-Maya artistic styles.", null],
+["w38", "Grave Creek Stone", "World", "West Virginia, USA", "claimed ancient; 19th-century discovery", "disputed script", "A small inscribed stone found in a burial mound, long debated and generally considered inauthentic by scholars.", null],
+["w39", "Gwanggaeto Stele", "World", "Ji'an, China (near Korean border)", "414 CE", "Classical Chinese characters", "A monumental stele praising the achievements of the Goguryeo king Gwanggaeto, a key source for early Korean history.", null],
+["w40", "Oracle Bone Inscriptions", "World", "Anyang, China", "c. 1250–1050 BCE", "Oracle bone script (early Chinese)", "Inscriptions on turtle shells and ox bones used for divination — the earliest known form of Chinese writing.", null],
+["w41", "Stone Drums of Qin", "World", "Shaanxi, China", "c. 8th–5th century BCE (debated)", "Old Chinese seal script", "Ten drum-shaped stones inscribed with early Chinese poetry, among the oldest surviving stone inscriptions in China.", null],
+["w42", "Nestorian Stele", "World", "Xi'an, China", "781 CE", "Chinese and Syriac", "Documents the arrival and practice of Christianity in Tang-dynasty China.", null],
+["w43", "Yongle Bell Inscription", "World", "Beijing, China", "early 15th century CE", "Chinese (Buddhist scripture text)", "A giant Ming-dynasty bell cast with the entire text of several Buddhist sutras across its surface.", null],
+["w44", "Longmen Grottoes Inscriptions", "World", "Luoyang, China", "5th–10th century CE", "Chinese", "Thousands of Buddhist dedicatory inscriptions accompanying carved cave shrines along the Yi River.", null],
+["w45", "Inariyama Sword Inscription", "World", "Saitama, Japan", "5th century CE", "Chinese characters used for Old Japanese", "One of the oldest inscriptions found in Japan, naming a lineage of officials on an iron sword.", null],
+["w46", "Hunminjeongeum", "World", "Korea", "1446 CE", "Hangul (with Classical Chinese preface)", "King Sejong the Great's proclamation introducing the Hangul alphabet to make writing accessible to common people.", "The sounds of our language differ from those of China."],
+["w47", "Angkor Wat Inscriptions", "World", "Angkor, Cambodia", "12th century CE", "Khmer and Sanskrit", "Temple inscriptions recording royal donations, genealogies and religious dedications at the great Khmer temple complex.", null],
+["w48", "Dome of the Rock Inscription", "World", "Jerusalem", "692 CE", "Arabic (Kufic script)", "One of the earliest and longest monumental Quranic inscriptions, encircling the interior of the shrine.", null],
+["w49", "Alhambra Court of the Lions Inscriptions", "World", "Granada, Spain", "14th century CE", "Arabic", "Poetic inscriptions by court poets adorning the walls of the Nasrid palace.", null],
+["w50", "Namara Inscription", "World", "Syria", "328 CE", "early Arabic script", "One of the oldest inscriptions in a script ancestral to Arabic, commemorating an Arab king allied with Rome.", null],
+["w51", "Nabataean Inscriptions at Petra", "World", "Petra, Jordan", "1st century BCE – 1st century CE", "Nabataean Aramaic", "Dedicatory and funerary inscriptions carved into the famous rock-cut city of the Nabataean kingdom.", null],
+["w52", "Aksum Stelae Inscriptions", "World", "Aksum, Ethiopia", "4th century CE", "Ge'ez", "Inscriptions associated with the giant carved obelisks of the Aksumite kingdom.", null],
+["w53", "Ezana Stone", "World", "Aksum, Ethiopia", "4th century CE", "Ge'ez, Sabaean, and Greek", "A trilingual inscription of King Ezana recording his military campaigns and his conversion to Christianity.", null],
+["w55", "Kilwa Kisiwani Inscriptions", "World", "Kilwa, Tanzania", "13th century CE", "Arabic", "Inscriptions from a major Swahili Coast trading sultanate, reflecting its Islamic and Indian Ocean trade connections.", null],
+["w56", "Sankore Mosque Inscriptions", "World", "Timbuktu, Mali", "14th–16th century CE", "Arabic", "Inscriptions and manuscripts from Timbuktu's famed center of Islamic scholarship.", null],
+["w57", "United States Declaration of Independence", "World", "Philadelphia, USA", "1776 CE", "English", "The founding document declaring the American colonies' independence from Britain, engrossed and later engraved in public monuments.", "We hold these truths to be self-evident, that all men are created equal."],
+["w58", "Statue of Liberty Pedestal Plaque", "World", "New York, USA", "1903 CE", "English", "A bronze plaque bearing Emma Lazarus's sonnet 'The New Colossus', welcoming immigrants to America.", "Give me your tired, your poor, your huddled masses yearning to breathe free."],
+["w59", "Lincoln Memorial Inscription", "World", "Washington D.C., USA", "1922 CE", "English", "Abraham Lincoln's Gettysburg Address, carved into the wall of the memorial built in his honor.", "Four score and seven years ago our fathers brought forth a new nation."],
+["w60", "Ten Commandments (Biblical Tablets)", "World", "traditionally Mount Sinai", "tradition dates to the Bronze Age; earliest surviving texts much later", "Hebrew", "The set of religious and ethical laws central to Judaism and Christianity, traditionally inscribed on stone tablets.", "I am the LORD thy God."],
+["w61", "United Nations Charter Preamble Inscription", "World", "New York, USA", "1945 CE", "English (and other UN languages)", "The opening words of the UN Charter, inscribed at UN Headquarters, affirming the determination to save future generations from war.", "We the peoples of the United Nations, determined to save succeeding generations from the scourge of war."],
+["w63", "Persepolis Fortification Inscriptions", "World", "Persepolis, Iran", "c. 5th century BCE", "Old Persian, Elamite cuneiform", "Administrative and royal inscriptions from the ceremonial capital of the Achaemenid Persian Empire.", null],
+["w64", "Naqsh-e Rustam Inscriptions", "World", "near Persepolis, Iran", "5th century BCE – 4th century CE", "Old Persian, Parthian, Middle Persian", "Royal tomb and triumphal inscriptions of Achaemenid and Sassanid Persian kings carved into a cliff face.", null],
+["w65", "Pyrgi Tablets", "World", "Pyrgi, Italy", "c. 500 BCE", "Etruscan and Phoenician", "Gold tablets bearing a bilingual dedication, a key source for understanding the Etruscan language.", null],
+["w66", "Linear B Tablets", "World", "Knossos, Crete, Greece", "c. 1400 BCE", "Linear B (early Greek)", "Clay tablets recording Mycenaean Greek administrative records, deciphered in the 1950s as the earliest form of written Greek.", null],
+["w67", "Antikythera Mechanism Inscriptions", "World", "found near Antikythera, Greece", "c. 150–100 BCE", "Greek", "Tiny inscribed instructions covering an ancient astronomical calculating device, the 'first analog computer'.", null],
+["w68", "Greenland Norse Runic Inscriptions", "World", "Greenland", "c. 14th century CE", "runes", "Runic inscriptions left by Norse settlers in Greenland, among the westernmost runic finds known.", null],
+["w69", "Orkhon Inscriptions", "World", "Orkhon Valley, Mongolia", "8th century CE", "Old Turkic runiform script", "Monumental inscriptions of the Göktürk Khaganate, among the oldest surviving records of a Turkic language.", null],
+["w70", "Sigiriya Mirror Wall Graffiti", "World", "Sigiriya, Sri Lanka", "8th–10th century CE", "Sinhala", "Centuries of visitor graffiti — poems and comments — scratched onto a polished wall beneath the ancient rock fortress.", null],
+["w71", "Siloam Inscription", "World", "Jerusalem", "8th century BCE", "Paleo-Hebrew", "An ancient Hebrew inscription describing the meeting of two groups excavating a water tunnel from opposite directions during the construction of Hezekiah's water system.", null],
+["w74", "Gezer Calendar", "World", "Gezer, Israel", "10th century BCE", "Paleo-Hebrew", "A short agricultural calendar listing seasonal farming activities and one of the earliest known Hebrew inscriptions.", null],
+["w75", "Sardis Synagogue Inscription", "World", "Sardis, Turkey", "3rd century CE", "Greek", "A Greek dedicatory inscription associated with the Jewish community at Sardis, reflecting Jewish communal life in Roman Asia Minor.", null],
+["in31", "Maski Rock Edict of Ashoka", "India", "Maski, Karnataka", "3rd century BCE", "Brahmi script, Prakrit", "An Ashokan rock edict from Maski that explicitly identifies the ruler as Ashoka, helping establish the attribution of other edicts to the same emperor.", null],
+["in32", "Talagunda Pillar Inscription", "India", "Talagunda, Karnataka", "5th century CE", "Sanskrit", "A Sanskrit inscription recording the genealogy and achievements of the Kadamba dynasty and describing the foundation of the Talagunda settlement.", null]
+];
+
+function isKnownPhrase(item){ return item[7] && !item[7].startsWith("(") ; }
+function isUndeciphered(item){ return item[7] && item[7].startsWith("("); }
+
+
+function updateStats(){
+  document.getElementById('indiaCount').textContent=DATA.filter(x=>x[2]==='India').length;
+  document.getElementById('worldCount').textContent=DATA.filter(x=>x[2]!=='India').length;
+  document.getElementById('languageCount').textContent=ALL_GROUPS.reduce((n,g)=>n+g.items.length,0);
+}
+function locationLabel(item){
+  const region=item[2], place=item[3];
+  if(region==='India'){
+    const states=["Gujarat","Odisha","Haryana","Uttar Pradesh","Karnataka","Tamil Nadu","Maharashtra","Madhya Pradesh","West Bengal","Andhra Pradesh","Delhi"];
+    const state=states.find(x=>place.includes(x));
+    return state ? `${place} · State: ${state}` : place;
+  }
+  const countries=[["USA","United States"],["England","United Kingdom"],["Scotland","United Kingdom"],["Wales","United Kingdom"],["Turkey","Turkey"],["Iran","Iran"],["Iraq","Iraq"],["Egypt","Egypt"],["Jordan","Jordan"],["Greece","Greece"],["Italy","Italy"],["China","China"],["Japan","Japan"],["Korea","South Korea"],["Cambodia","Cambodia"],["Mexico","Mexico"],["Guatemala","Guatemala"],["Honduras","Honduras"],["Peru","Peru"],["Chile","Chile"],["Israel","Israel"],["Syria","Syria"],["Ethiopia","Ethiopia"],["Sudan","Sudan"],["Tanzania","Tanzania"],["Mali","Mali"],["Mongolia","Mongolia"],["Sri Lanka","Sri Lanka"],["Denmark","Denmark"],["Sweden","Sweden"]];
+  const hit=countries.find(x=>place.includes(x[0]));
+  return hit ? `${place} · Country: ${hit[1]}` : place;
+}
+
+/* ---------- render inscription list ---------- */
+const selectedInsc = new Set();
+let currentFilter = "all";
+let currentQuery = "";
+
+function matchesQuery(item, q){
+  if(!q) return true;
+  const hay = (item[1]+" "+item[3]+" "+item[4]+" "+item[5]+" "+item[6]).toLowerCase();
+  return hay.includes(q.toLowerCase());
+}
+function matchesFilter(item){
+  if(currentFilter === "all") return true;
+  return item[2] === currentFilter;
+}
+
+function renderList(){
+  const root = document.getElementById('inscriptionList');
+  root.innerHTML = '';
+  const filtered = DATA.filter(item => matchesFilter(item) && matchesQuery(item, currentQuery));
+  document.getElementById('listCount').textContent = `Showing ${filtered.length} of ${DATA.length}`;
+  filtered.forEach(item => {
+    const [id,name,region,place,era,script,blurb] = item;
+    const card = document.createElement('div');
+    card.className = 'insc-card' + (selectedInsc.has(id) ? ' checked' : '');
+    card.innerHTML = `
+      <div class="insc-top">
+        <div>
+          <div class="insc-name">${name}</div>
+          <div class="insc-meta">${locationLabel(item)} · ${era} · ${script}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+          <span class="badge ${region==='India'?'india':''}">${region}</span>
+          <div class="checkmark"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+        </div>
+      </div>
+      <div class="insc-blurb">${blurb}</div>
+    `;
+    card.addEventListener('click', () => {
+      selectedInsc.has(id) ? selectedInsc.delete(id) : selectedInsc.add(id);
+      card.classList.toggle('checked');
+      document.getElementById('selCount').textContent = selectedInsc.size;
+    });
+    root.appendChild(card);
+  });
+}
+updateStats();
+renderList();
+
+document.getElementById('searchInput').addEventListener('input', e => { currentQuery = e.target.value; renderList(); });
+document.querySelectorAll('.filter-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    renderList();
+  });
+});
+document.getElementById('clearSelection').addEventListener('click', () => {
+  selectedInsc.clear();
+  document.getElementById('selCount').textContent = 0;
+  renderList();
+});
+
+/* ---------- language picker ---------- */
+function renderLangGroups(){
+  const root = document.getElementById('langGroups');
+  root.innerHTML = '';
+  ALL_GROUPS.forEach(g => {
+    const wrap = document.createElement('div');
+    wrap.className = 'lang-group';
+    wrap.innerHTML = `<h3>${g.group}</h3>`;
+    const list = document.createElement('div');
+    list.className = 'chip-list';
+    g.items.forEach(([name, native]) => {
+      const chip = document.createElement('label');
+      chip.className = 'chip' + (selectedLangs.has(name) ? ' checked' : '');
+      chip.innerHTML = `<input type="checkbox" ${selectedLangs.has(name)?'checked':''}> ${name} <span style="opacity:.6">· ${native}</span>`;
+      chip.querySelector('input').addEventListener('change', e => {
+        e.target.checked ? selectedLangs.add(name) : selectedLangs.delete(name);
+        chip.classList.toggle('checked');
+      });
+      list.appendChild(chip);
+    });
+    wrap.appendChild(list);
+    root.appendChild(wrap);
+  });
+}
+renderLangGroups();
+document.getElementById('selectDefault').addEventListener('click', () => { selectedLangs.clear(); DEFAULT_LANGS.forEach(l=>selectedLangs.add(l)); renderLangGroups(); });
+document.getElementById('selectAllLang').addEventListener('click', () => { selectedLangs.clear(); ALL_GROUPS.forEach(g=>g.items.forEach(([n])=>selectedLangs.add(n))); renderLangGroups(); });
+document.getElementById('selectNoneLang').addEventListener('click', () => { selectedLangs.clear(); renderLangGroups(); });
+
+/* ---------- API helpers ---------- */
+async function callClaude(content){
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1200, messages: [{ role: "user", content }] })
+  });
+  if(!res.ok){
+    let detail=''; try{ detail=(await res.json()).error?.message||''; }catch{}
+    throw new Error("API error "+res.status+(detail?": "+detail:""));
+  }
+  const data = await res.json();
+  return data.content.map(b=>b.text||"").join("\n").replace(/```json|```/g,"").trim();
+}
+function extractJson(raw){
+  const start = raw.indexOf('{');
+  if(start===-1) throw new Error("No JSON in response");
+  let end = raw.lastIndexOf('}');
+  let candidate = end>start ? raw.slice(start,end+1) : raw.slice(start);
+  try { return JSON.parse(candidate); }
+  catch {
+    let fixed = candidate;
+    if((fixed.match(/"/g)||[]).length % 2) fixed += '"';
+    fixed = fixed.replace(/,\s*$/,'');
+    const opens=(fixed.match(/{/g)||[]).length, closes=(fixed.match(/}/g)||[]).length;
+    fixed += '}'.repeat(Math.max(0, opens-closes));
+    return JSON.parse(fixed);
+  }
+}
+function chunk(arr,size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- translate flow ---------- */
+const statusEl = document.getElementById('statusText');
+const translateBtn = document.getElementById('translateBtn');
+const resultsSection = document.getElementById('results');
+const resultsWrap = document.getElementById('resultsWrap');
+
+function setStatus(msg, err){ statusEl.textContent = msg||''; statusEl.className = 'status'+(err?' err':''); }
+
+
+document.getElementById('translateBtn').addEventListener('click', async () => {
+  const selected = DATA.filter(x => selectedInsc.has(x[0]));
+  const langs = [...selectedLangs];
+  const btn = document.getElementById('translateBtn');
+  const status = document.getElementById('statusText');
+  const results = document.getElementById('results');
+  const resultsWrap = document.getElementById('resultsWrap');
+
+  if (!selected.length) {
+    status.className = 'status err';
+    status.textContent = 'Please select at least one inscription.';
+    return;
+  }
+  if (!langs.length) {
+    status.className = 'status err';
+    status.textContent = 'Please select at least one target language.';
+    return;
+  }
+
+  btn.disabled = true;
+  results.style.display = 'block';
+  resultsWrap.innerHTML = '';
+  status.className = 'status';
+  status.textContent = 'Translating…';
+
+  for (const item of selected) {
+    const [id,name,region,place,era,script,blurb,keyPhrase] = item;
+    const source = isKnownPhrase(item) ? keyPhrase : blurb;
+    const group = document.createElement('div');
+    group.className = 'result-group';
+    group.innerHTML = `<h3>${safe(name)}</h3>
+      <div class="rg-meta">${safe(place)} · ${safe(era)} · ${safe(script)}</div>
+      <div class="source-text"><div class="source-label">${isKnownPhrase(item) ? 'Documented reference phrase' : 'Documented content summary'}</div>${safe(source)}</div>
+      <div class="result-grid"></div>`;
+    resultsWrap.appendChild(group);
+    const grid = group.querySelector('.result-grid');
+
+    for (const lang of langs) {
+      const card=document.createElement('div');
+      card.className='result-card';
+      card.innerHTML=`<div class="lang-name"><span>${safe(lang)}</span><span class="lang-native">${safe(nativeNameOf(lang))}</span></div><div class="translation">Translating…</div>`;
+      grid.appendChild(card);
+      try {
+        card.querySelector('.translation').textContent = await translateText(source, lang);
+      } catch(e) {
+        console.error(e);
+        card.querySelector('.translation').textContent='Translation unavailable. Please try again.';
+      }
+      if(['Arabic','Urdu','Sindhi','Kashmiri'].includes(lang)) card.dir='rtl';
+    }
+  }
+  status.textContent='Translation complete.';
+  btn.disabled=false;
+});
+
+function safe(v){
+  return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function translateText(source, lang){
+  const code={
+    "Hindi":"hi","Urdu":"ur","Punjabi":"pa","Kashmiri":"ks","Dogri":"doi","Sindhi":"sd",
+    "Nepali":"ne","Maithili":"mai","Bengali":"bn","Odia":"or","Assamese":"as","Bodo":"brx",
+    "Manipuri (Meitei)":"mni","Santali":"sat","Marathi":"mr","Gujarati":"gu","Tamil":"ta",
+    "Telugu":"te","Kannada":"kn","Malayalam":"ml","Sanskrit":"sa","Konkani":"gom",
+    "English":"en","French":"fr","Spanish":"es","Arabic":"ar","Mandarin Chinese":"zh-CN"
+  }[lang];
+  if(!code) throw new Error("Unsupported language");
+
+  const clean=String(source).trim();
+  if(lang==="English") return clean;
+
+  const cacheKey=`shilalekh-translation-v4:${code}:${clean}`;
+  try{
+    const cached=localStorage.getItem(cacheKey);
+    if(cached) return cached;
+  }catch{}
+
+  /* Google Translate endpoint — no API key required. */
+  try{
+    const url=`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(code)}&dt=t&q=${encodeURIComponent(clean)}`;
+    const response=await fetch(url,{method:"GET",mode:"cors",cache:"no-store"});
+    if(!response.ok) throw new Error(`Google Translate HTTP ${response.status}`);
+    const data=await response.json();
+    let result="";
+    if(Array.isArray(data) && Array.isArray(data[0])){
+      result=data[0].map(part=>Array.isArray(part)?(part[0]||""):"").join("").trim();
+    }
+    if(result){
+      try{localStorage.setItem(cacheKey,result);}catch{}
+      return result;
+    }
+  }catch(err){ console.warn("Primary translator failed:",err); }
+
+  /* CORS-friendly fallback. MyMemory supports many of the same language codes. */
+  try{
+    const pair=`en|${code}`;
+    const url=`https://api.mymemory.translated.net/get?q=${encodeURIComponent(clean)}&langpair=${encodeURIComponent(pair)}`;
+    const response=await fetch(url,{method:"GET",mode:"cors",cache:"no-store"});
+    if(!response.ok) throw new Error(`Fallback translator HTTP ${response.status}`);
+    const data=await response.json();
+    const result=String(data?.responseData?.translatedText||"").trim();
+    if(result && !/MYMEMORY WARNING|QUOTA|LIMIT/i.test(result)){
+      try{localStorage.setItem(cacheKey,result);}catch{}
+      return result;
+    }
+  }catch(err){ console.warn("Fallback translator failed:",err); }
+
+  throw new Error(`No translation service is currently available for ${lang}.`);
+}
+</script>
+<script src="script.js" defer></script>
+</body>
+</html>
